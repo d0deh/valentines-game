@@ -1,0 +1,26 @@
+{
+  "name": "valentines-book",
+  "version": "1.0.0",
+  "description": "An interactive Valentine's Day digital book experience",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && npx gh-pages -d dist"
+  },
+  "dependencies": {
+    "gsap": "^3.12.5",
+    "page-flip": "^2.0.7"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  },
+  "keywords": [
+    "valentine",
+    "book",
+    "interactive",
+    "love"
+  ],
+  "license": "MIT"
+}
