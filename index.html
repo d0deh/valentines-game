@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="An interactive Valentine's Day digital book experience">
+  <meta name="theme-color" content="#2D5A3D">
+
+  <title>A Story For You</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💚</text></svg>">
+  <script type="module" crossorigin src="/valentines-game/assets/index-D77uBiSg.js"></script>
+  <link rel="stylesheet" crossorigin href="/valentines-game/assets/index-CsZstI-l.css">
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div class="loading-screen" id="loading-screen" role="alert" aria-live="polite" aria-label="Loading">
+    <div class="loading-heart" aria-hidden="true">💚</div>
+    <p class="loading-text">Preparing something special...</p>
+  </div>
+
+  <!-- Floating particles (decorative) -->
+  <div class="particles" id="particles" aria-hidden="true"></div>
+
+  <!-- Music Controls -->
+  <div class="music-controls" id="music-controls">
+    <button
+      class="music-control"
+      id="music-btn"
+      type="button"
+      aria-label="Toggle background music (currently muted)"
+    >🔇</button>
+    <div class="volume-control" id="volume-control">
+      <div class="volume-dial" id="volume-dial">
+        <div class="volume-dial-track"></div>
+        <div class="volume-dial-fill" id="volume-fill"></div>
+        <div class="volume-dial-knob" id="volume-knob"></div>
+      </div>
+      <span class="volume-label" id="volume-label">50%</span>
+    </div>
+  </div>
+
+  <audio id="bg-music" loop preload="auto">
+    <source src="/valentines-game/music.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+  </audio>
+
+  <!-- Book Container -->
+  <main class="book-container" role="main">
+    <!-- Nav arrow: previous -->
+    <button class="nav-arrow nav-arrow--prev" id="nav-prev" type="button" aria-label="Previous page">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+
+    <div id="book" aria-label="Interactive story book"></div>
+
+    <!-- Nav arrow: next -->
+    <button class="nav-arrow nav-arrow--next" id="nav-next" type="button" aria-label="Next page">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </main>
+
+  <!-- Page indicator + hint -->
+  <div class="book-footer" id="book-footer">
+    <span class="page-indicator" id="page-indicator">Page 1 / 16</span>
+    <span class="nav-hint" id="nav-hint">Click or drag to turn pages &bull; Arrow keys work too</span>
+  </div>
+
+  <!-- Question Screen - The Big Moment -->
+  <div
+    class="question-screen"
+    id="question-screen"
+    role="dialog"
+    aria-labelledby="question-title"
+    aria-modal="true"
+    aria-hidden="true"
+  >
+    <button class="back-to-book-btn" id="back-to-book-btn" type="button" aria-label="Go back to the book">
+      ← Back to Book
+    </button>
+    <div class="question-screen-content">
+      <h1 class="question-title" id="question-title">Will You Be My Valentine? 💚</h1>
+      <div class="question-buttons" role="group" aria-label="Response buttons">
+        <button class="yes-btn" id="yes-btn" type="button" aria-label="Yes, I will be your valentine">
+          Yes! 💚
+        </button>
+        <div class="no-btn-container" id="no-btn-container">
+          <button class="no-btn" id="no-btn" type="button" aria-label="No">
+            No
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success Screen -->
+  <div
+    class="success-screen"
+    id="success-screen"
+    role="dialog"
+    aria-labelledby="success-title"
+    aria-modal="true"
+    aria-hidden="true"
+  >
+    <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+    <h1 class="success-title" id="success-title">Yay!</h1>
+    <p class="success-message" id="success-msg"></p>
+    <div class="success-hearts" aria-hidden="true">💚💚💚💚💚</div>
+    <button class="restart-btn" id="restart-btn" type="button">Start Over</button>
+  </div>
+
+  <!-- Skip to content link for accessibility -->
+  <a href="#book" class="sr-only" style="position:absolute;left:-9999px;">Skip to book content</a>
+
+  <!-- Main application script -->
+</body>
+</html>

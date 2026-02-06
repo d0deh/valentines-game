@@ -1,0 +1,6 @@
+# Place your static assets here:
+# - music.mp3 (background music)
+# - Any custom images (page1.jpg, page2.jpg, etc.)
+#
+# These files will be served from the root path.
+# For example, music.mp3 will be accessible at /music.mp3
