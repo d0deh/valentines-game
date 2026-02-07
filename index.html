@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="An interactive Valentine's Day digital book experience">
   <meta name="theme-color" content="#2D5A3D">
 
@@ -15,8 +15,10 @@
 
   <!-- Favicon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💚</text></svg>">
-  <script type="module" crossorigin src="/valentines-game/assets/index-grEhM_y0.js"></script>
-  <link rel="stylesheet" crossorigin href="/valentines-game/assets/index-C5SB5yy9.css">
+  <script type="module" crossorigin src="/valentines-game/assets/index-CYDDQHbL.js"></script>
+  <link rel="modulepreload" crossorigin href="/valentines-game/assets/page-flip-CmgiROxD.js">
+  <link rel="modulepreload" crossorigin href="/valentines-game/assets/gsap-C8pce-KX.js">
+  <link rel="stylesheet" crossorigin href="/valentines-game/assets/index-C-BAHdG4.css">
 </head>
 <body>
   <!-- Loading Screen -->
@@ -46,10 +48,7 @@
     </div>
   </div>
 
-  <audio id="bg-music" loop preload="auto">
-    <source src="/valentines-game/music.mp3" type="audio/mpeg">
-    Your browser does not support the audio element.
-  </audio>
+  <audio id="bg-music" loop preload="auto"></audio>
 
   <!-- Book Container -->
   <main class="book-container" role="main">
@@ -114,6 +113,9 @@
     <div class="success-hearts" aria-hidden="true">💚💚💚💚💚</div>
     <button class="restart-btn" id="restart-btn" type="button">Read Again 💚</button>
   </div>
+
+  <!-- Screen reader page announcer -->
+  <div aria-live="polite" class="sr-only" id="page-announcer"></div>
 
   <!-- Skip to content link for accessibility -->
   <a href="#book" class="sr-only" style="position:absolute;left:-9999px;">Skip to book content</a>
