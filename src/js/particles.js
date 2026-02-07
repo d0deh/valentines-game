@@ -20,7 +20,11 @@ export function createParticles() {
   // Clear existing particles
   container.innerHTML = '';
 
-  const count = CONFIG.animations.particleCount;
+  // Reduce on mobile for battery/perf
+  const isMobile = window.innerWidth < 768;
+  const count = isMobile
+    ? Math.floor(CONFIG.animations.particleCount / 2)
+    : CONFIG.animations.particleCount;
 
   for (let i = 0; i < count; i++) {
     const particle = document.createElement('div');

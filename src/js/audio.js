@@ -11,6 +11,7 @@ class AudioManager {
     this.isMusicPlaying = false;
     this.isMusicStarted = false;
     this.audioContext = null;
+    this._savedVolume = 0.5;
   }
 
   /**
@@ -19,8 +20,22 @@ class AudioManager {
   init() {
     this.musicElement = document.getElementById('bg-music');
     if (this.musicElement) {
+      // Set correct path using Vite's base URL (fixes GitHub Pages deployment)
+      const base = import.meta.env.BASE_URL || '/';
+      this.musicElement.src = base + CONFIG.audio.musicFile;
       this.musicElement.volume = CONFIG.audio.musicVolume;
     }
+
+    // Pause audio when tab is hidden, resume when visible
+    document.addEventListener('visibilitychange', () => {
+      if (!this.musicElement) return;
+      if (document.hidden && this.isMusicPlaying) {
+        this._savedVolume = this.musicElement.volume;
+        this.musicElement.volume = 0;
+      } else if (!document.hidden && this.isMusicPlaying) {
+        this.musicElement.volume = this._savedVolume;
+      }
+    });
   }
 
   /**
@@ -28,7 +43,16 @@ class AudioManager {
    */
   getAudioContext() {
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      try {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        console.warn('AudioContext creation failed:', e.message);
+        return null;
+      }
+    }
+    // Resume if suspended (browser autoplay policy)
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
     }
     return this.audioContext;
   }
@@ -41,6 +65,7 @@ class AudioManager {
 
     try {
       const ctx = this.getAudioContext();
+      if (!ctx) return;
       const duration = 0.15;
 
       // Create white noise buffer for paper sound
@@ -86,6 +111,7 @@ class AudioManager {
 
     try {
       const ctx = this.getAudioContext();
+      if (!ctx) return;
       const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
 
       notes.forEach((freq, i) => {
@@ -146,6 +172,16 @@ class AudioManager {
     }
 
     return this.isMusicPlaying;
+  }
+
+  /**
+   * Set volume with logarithmic curve for natural feel
+   */
+  setVolume(linearValue) {
+    if (!this.musicElement) return;
+    // Quadratic curve: human hearing is logarithmic
+    this.musicElement.volume = Math.pow(linearValue, 2);
+    this._savedVolume = this.musicElement.volume;
   }
 
   /**

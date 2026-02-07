@@ -9,6 +9,17 @@ import { CONFIG } from '../config.js';
 const CONFETTI_COLORS = ['#5c8a6b', '#9CAF88', '#D4A574', '#fff', '#c8e6c9', '#7aa87a'];
 
 let animationId = null;
+let isAnimating = false;
+let resizeHandler = null;
+let autoStopTimer = null;
+let visibilityHandler = null;
+
+/**
+ * Check if user prefers reduced motion
+ */
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 /**
  * Draw a heart shape on canvas
@@ -27,24 +38,43 @@ function drawHeart(ctx, x, y, size) {
  * Start celebration animation with confetti and hearts
  */
 export function celebrate() {
+  // Guard: prevent stacking multiple animations
+  if (isAnimating) return;
+  // Respect user motion preferences
+  if (prefersReducedMotion()) return;
+
+  isAnimating = true;
+
   const canvas = document.getElementById('confetti-canvas');
   if (!canvas) {
-    console.warn('Confetti canvas not found');
+    isAnimating = false;
     return;
   }
 
   const ctx = canvas.getContext('2d');
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+
+  // DPR-aware canvas for crisp rendering on retina
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  ctx.scale(dpr, dpr);
+
+  // Reduce particles on mobile for battery/perf
+  const isMobile = window.innerWidth < 768;
+  const confettiCount = isMobile ? 60 : CONFIG.animations.confettiCount;
+  const heartCount = isMobile ? 8 : CONFIG.animations.heartCount;
 
   const particles = [];
 
   // Create confetti pieces
-  const confettiCount = CONFIG.animations.confettiCount;
   for (let i = 0; i < confettiCount; i++) {
     particles.push({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height - canvas.height,
+      x: Math.random() * w,
+      y: Math.random() * h - h,
       w: 6 + Math.random() * 6,
       h: 4 + Math.random() * 5,
       color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
@@ -57,11 +87,10 @@ export function celebrate() {
   }
 
   // Create floating hearts
-  const heartCount = CONFIG.animations.heartCount;
   for (let i = 0; i < heartCount; i++) {
     particles.push({
-      x: Math.random() * canvas.width,
-      y: canvas.height + Math.random() * 100,
+      x: Math.random() * w,
+      y: h + Math.random() * 100,
       size: 12 + Math.random() * 15,
       color: CONFETTI_COLORS[Math.floor(Math.random() * 2)],
       speed: 0.8 + Math.random() * 1.5,
@@ -72,7 +101,7 @@ export function celebrate() {
 
   // Animation loop
   function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, w, h);
 
     particles.forEach((p) => {
       if (p.type === 'heart') {
@@ -80,29 +109,23 @@ export function celebrate() {
         drawHeart(ctx, p.x + Math.sin(p.wobble) * 12, p.y, p.size);
         p.y -= p.speed;
         p.wobble += 0.03;
-
-        // Reset when off screen
         if (p.y < -p.size) {
-          p.y = canvas.height + p.size;
-          p.x = Math.random() * canvas.width;
+          p.y = h + p.size;
+          p.x = Math.random() * w;
         }
       } else {
-        // Confetti
         ctx.save();
         ctx.translate(p.x + Math.sin(p.wobble) * 20, p.y);
         ctx.rotate(p.rotation);
         ctx.fillStyle = p.color;
         ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
         ctx.restore();
-
         p.y += p.speed;
         p.rotation += p.rotationSpeed;
         p.wobble += 0.02;
-
-        // Reset when off screen
-        if (p.y > canvas.height + 20) {
+        if (p.y > h + 20) {
           p.y = -20;
-          p.x = Math.random() * canvas.width;
+          p.x = Math.random() * w;
         }
       }
     });
@@ -110,15 +133,39 @@ export function celebrate() {
     animationId = requestAnimationFrame(animate);
   }
 
-  // Handle window resize
-  const handleResize = () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+  // Resize handler (properly cleaned up later)
+  resizeHandler = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const nw = window.innerWidth;
+    const nh = window.innerHeight;
+    canvas.width = nw * dpr;
+    canvas.height = nh * dpr;
+    canvas.style.width = `${nw}px`;
+    canvas.style.height = `${nh}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   };
-  window.addEventListener('resize', handleResize);
+  window.addEventListener('resize', resizeHandler);
+
+  // Pause when tab hidden, resume when visible
+  visibilityHandler = () => {
+    if (document.hidden) {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+    } else if (isAnimating) {
+      animate();
+    }
+  };
+  document.addEventListener('visibilitychange', visibilityHandler);
 
   // Start animation
   animate();
+
+  // Auto-stop after 10 seconds to save battery
+  autoStopTimer = setTimeout(() => {
+    stopCelebration();
+  }, 10000);
 }
 
 /**
@@ -128,20 +175,20 @@ export function showSuccessScreen() {
   const successScreen = document.getElementById('success-screen');
   const successMsg = document.getElementById('success-msg');
 
-  if (!successScreen) {
-    console.warn('Success screen not found');
-    return;
-  }
+  if (!successScreen) return;
 
-  // Set success message
   if (successMsg) {
     successMsg.textContent = CONFIG.successMessage;
   }
 
-  // Make visible
   successScreen.classList.add('visible');
 
-  // Animate with GSAP
+  // Respect reduced motion
+  if (prefersReducedMotion()) {
+    successScreen.style.opacity = '1';
+    return;
+  }
+
   gsap.fromTo(
     successScreen,
     { opacity: 0 },
@@ -179,13 +226,26 @@ export function showSuccessScreen() {
 }
 
 /**
- * Stop celebration animation
+ * Stop celebration animation and clean up all listeners
  */
 export function stopCelebration() {
   if (animationId) {
     cancelAnimationFrame(animationId);
     animationId = null;
   }
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler);
+    resizeHandler = null;
+  }
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler);
+    visibilityHandler = null;
+  }
+  if (autoStopTimer) {
+    clearTimeout(autoStopTimer);
+    autoStopTimer = null;
+  }
+  isAnimating = false;
 }
 
 export default { celebrate, showSuccessScreen, stopCelebration };

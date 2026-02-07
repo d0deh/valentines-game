@@ -8,7 +8,7 @@ export const CONFIG = {
   name: "My Love",
 
   // Message shown on success screen
-  successMessage: "I love you so much!",
+  successMessage: "I LOVE YOU SO MUCH!",
 
   // Book title on the cover
   bookTitle: "Our Story",
@@ -64,14 +64,14 @@ export const CONFIG = {
   },
 
   // Book dimensions — page-flip stretches to fill container
-  // width/height set the aspect ratio (4:5 per page)
+  // width/height set the aspect ratio (16:9 landscape to match images)
   book: {
-    width: 800,
-    height: 1000,
-    minWidth: 280,
+    width: 1200,
+    height: 675,
+    minWidth: 300,
     maxWidth: 1400,
-    minHeight: 350,
-    maxHeight: 1600,
+    minHeight: 169,
+    maxHeight: 788,
   },
 
   // "No" button texts when hovering - loops infinitely!
@@ -119,7 +119,7 @@ export const CONFIG = {
     "Name your price!",
 
     // Stage 7: Getting weird
-    "Ill force you to love me",
+    "I'll make you love me",
     "You can't escape love",
     "Reem?",
     "I have all day...",
@@ -129,7 +129,7 @@ export const CONFIG = {
     "ok but consider: yes",
     "no is just yes spelled wrong",
     "I'm not crying you're crying",
-    "Im telling mama",
+    "I'm telling mama",
     "This is my villain origin story",
 
     // Stage 9: Full chaos

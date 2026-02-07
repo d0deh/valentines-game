@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // Change 'valentines-game' to your GitHub repo name
-  base: '/valentines-game/',
+  base: process.env.VITE_BASE_URL || '/valentines-game/',
   root: '.',
   publicDir: 'public',
   build: {
@@ -10,6 +9,13 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'gsap': ['gsap'],
+        },
+      },
+    },
   },
   server: {
     port: 3000,

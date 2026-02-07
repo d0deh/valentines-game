@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="An interactive Valentine's Day digital book experience">
   <meta name="theme-color" content="#2D5A3D">
 
@@ -44,10 +44,7 @@
     </div>
   </div>
 
-  <audio id="bg-music" loop preload="auto">
-    <source src="/music.mp3" type="audio/mpeg">
-    Your browser does not support the audio element.
-  </audio>
+  <audio id="bg-music" loop preload="auto"></audio>
 
   <!-- Book Container -->
   <main class="book-container" role="main">
@@ -107,11 +104,14 @@
     aria-hidden="true"
   >
     <canvas id="confetti-canvas" aria-hidden="true"></canvas>
-    <h1 class="success-title" id="success-title">Yay!</h1>
+    <h1 class="success-title" id="success-title">YAY!</h1>
     <p class="success-message" id="success-msg"></p>
     <div class="success-hearts" aria-hidden="true">💚💚💚💚💚</div>
-    <button class="restart-btn" id="restart-btn" type="button">Start Over</button>
+    <button class="restart-btn" id="restart-btn" type="button">Read Again 💚</button>
   </div>
+
+  <!-- Screen reader page announcer -->
+  <div aria-live="polite" class="sr-only" id="page-announcer"></div>
 
   <!-- Skip to content link for accessibility -->
   <a href="#book" class="sr-only" style="position:absolute;left:-9999px;">Skip to book content</a>

@@ -39,16 +39,19 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: 'Cormorant Garamond', 'Times New Roman', Georgia, serif;
   background: #1c1c20;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   justify-content: center;
   align-items: center;
   overflow: hidden;
+  overscroll-behavior: none;
   color: var(--text);
   line-height: 1.6;
 }
@@ -80,6 +83,16 @@ body::after {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   pointer-events: none;
   z-index: 1;
+}
+
+/* Prevent double-tap zoom and text selection on interactive elements */
+button,
+.nav-arrow,
+.music-control,
+.volume-dial {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ==================== Loading Screen ==================== */
@@ -135,14 +148,11 @@ body::after {
   will-change: transform;
 }
 
-/* ==================== Navigation Hint ==================== */
-/* (Styling moved to book.css .book-footer / .nav-hint) */
-
 /* ==================== Music Controls ==================== */
 .music-controls {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   gap: 12px;
@@ -151,6 +161,7 @@ body::after {
   padding: 8px 12px 8px 8px;
   border-radius: 30px;
   box-shadow: var(--shadow-medium);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -163,7 +174,7 @@ body::after {
   border-radius: 50%;
   cursor: pointer;
   font-size: 16px;
-  transition: all var(--transition-medium);
+  transition: transform var(--transition-medium), background var(--transition-medium);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -325,7 +336,7 @@ body::after {
   border: none;
   border-radius: 60px;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
   box-shadow:
     0 10px 40px rgba(45, 90, 61, 0.5),
     0 6px 20px rgba(45, 90, 61, 0.3),
@@ -396,7 +407,7 @@ body::after {
   border: none;
   border-radius: 30px;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: background 0.12s ease;
   position: absolute;
   top: 70%;
   left: 50%;
@@ -415,8 +426,8 @@ body::after {
 /* Back to Book Button */
 .back-to-book-btn {
   position: absolute;
-  top: 30px;
-  left: 30px;
+  top: max(30px, env(safe-area-inset-top));
+  left: max(30px, env(safe-area-inset-left));
   padding: 12px 24px;
   font-family: 'Cormorant Garamond', serif;
   font-size: 16px;
@@ -425,7 +436,7 @@ body::after {
   border: 2px solid var(--forest);
   border-radius: 25px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.3s ease, color 0.3s ease;
   z-index: 10;
 }
 
@@ -493,7 +504,7 @@ body::after {
   border: 2px solid var(--sage);
   border-radius: 25px;
   cursor: pointer;
-  transition: all var(--transition-medium);
+  transition: background var(--transition-medium), color var(--transition-medium), opacity var(--transition-medium);
   opacity: 0.7;
 }
 
@@ -529,10 +540,14 @@ body::after {
   }
 
   .music-controls {
-    top: 15px;
-    right: 15px;
+    top: max(15px, env(safe-area-inset-top));
+    right: max(15px, env(safe-area-inset-right));
     padding: 6px 10px 6px 6px;
     gap: 8px;
+    /* Solid bg on mobile — backdrop-filter is expensive */
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(30, 50, 35, 0.95);
   }
 
   .music-control {
@@ -581,8 +596,8 @@ body::after {
   }
 
   .back-to-book-btn {
-    top: 15px;
-    left: 15px;
+    top: max(15px, env(safe-area-inset-top));
+    left: max(15px, env(safe-area-inset-left));
     padding: 10px 18px;
     font-size: 14px;
   }

@@ -1,17 +1,19 @@
 /**
  * Book module
- * Handles page flip initialization, page generation, and navigation
+ * Handles page generation and spoiler-free page flip transitions.
+ * Replaces the page-flip library with a custom engine that never
+ * reveals upcoming pages during animations.
  */
 
-import { PageFlip } from 'page-flip';
 import { CONFIG } from '../config.js';
 import { generatePlaceholderSVG } from './placeholders.js';
 
 let pageFlipInstance = null;
 
-/**
- * Generate cover page HTML
- */
+/* ================================================================
+   Page HTML generators (unchanged)
+   ================================================================ */
+
 function generateCoverPage() {
   return `
     <div class="page cover-page" data-density="hard">
@@ -23,18 +25,12 @@ function generateCoverPage() {
   `;
 }
 
-/**
- * Resolve an image path relative to Vite's base URL
- */
 function resolveImagePath(imagePath) {
   if (!imagePath) return '';
   const base = import.meta.env.BASE_URL || '/';
   return base + imagePath;
 }
 
-/**
- * Generate content page HTML
- */
 function generateContentPage(pageNumber, pageData) {
   const hasText = pageData.text && pageData.text.trim().length > 0;
   const fullImageClass = !hasText && pageData.image ? ' image-full' : '';
@@ -42,7 +38,7 @@ function generateContentPage(pageNumber, pageData) {
 
   const imageSrc = resolveImagePath(pageData.image);
   const imageContent = pageData.image
-    ? `<img src="${imageSrc}" alt="Page ${pageNumber}"${lazyAttr} onload="this.classList.add('loaded')" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`
+    ? `<img src="${imageSrc}" alt="Page ${pageNumber}"${lazyAttr}>`
     : '';
 
   const placeholderSVG = generatePlaceholderSVG(pageNumber);
@@ -69,24 +65,24 @@ function generateContentPage(pageNumber, pageData) {
   `;
 }
 
-/**
- * Generate end page HTML (the last page of the book before the question)
- */
 function generateEndPage() {
   return `
     <div class="page end-page" data-density="hard" role="article" aria-label="End of Story">
       <div class="end-page-content">
         <div class="end-decoration" aria-hidden="true">💚</div>
         <p class="end-text">And now, I have a question for you...</p>
-        <p class="end-hint">Turn the page to find out 💚</p>
+        <button class="end-page-btn" id="end-page-btn" type="button">
+          I'm ready 💚
+        </button>
       </div>
     </div>
   `;
 }
 
-/**
- * Build all book pages
- */
+/* ================================================================
+   Build book pages into #book
+   ================================================================ */
+
 export function buildBookPages() {
   const bookEl = document.getElementById('book');
   if (!bookEl) {
@@ -94,32 +90,254 @@ export function buildBookPages() {
     return;
   }
 
-  // Clear existing content
   bookEl.innerHTML = '';
 
-  // Add cover
   bookEl.insertAdjacentHTML('beforeend', generateCoverPage());
 
-  // Add content pages
   CONFIG.pages.forEach((pageData, index) => {
     const pageNumber = index + 1;
     bookEl.insertAdjacentHTML('beforeend', generateContentPage(pageNumber, pageData));
   });
 
-  // Add end page (teaser before the big question)
   bookEl.insertAdjacentHTML('beforeend', generateEndPage());
+
+  setupImageHandlers();
 }
 
-/**
- * Get total page count (for detecting last page)
- */
+function setupImageHandlers() {
+  const images = document.querySelectorAll('#book .image-container img');
+  images.forEach((img) => {
+    img.addEventListener('load', () => img.classList.add('loaded'));
+    img.addEventListener('error', () => {
+      img.style.display = 'none';
+      const placeholder = img.nextElementSibling;
+      if (placeholder) placeholder.style.display = 'flex';
+    });
+  });
+}
+
 export function getTotalPages() {
-  return CONFIG.pages.length + 2; // cover + content pages + end page
+  return CONFIG.pages.length + 2; // cover + content + end
 }
 
-/**
- * Initialize page flip library
- */
+/* ================================================================
+   CustomPageFlip — spoiler-free page transitions
+   Only the CURRENT page is ever visible. Future pages are hidden
+   until the flip animation completes.
+   ================================================================ */
+
+class CustomPageFlip {
+  constructor(container, options) {
+    this.container = container;
+    this.options = options;
+    this.pages = [];
+    this.wrappers = [];
+    this.viewport = null;
+    this.currentPage = 0;
+    this.isFlipping = false;
+    this.events = {};
+    this.flipDuration = options.flippingTime || 600;
+
+    // Touch / swipe tracking
+    this.touchStartX = 0;
+    this.touchStartY = 0;
+    this.swipeThreshold = options.swipeDistance || 50;
+  }
+
+  /* ---------- Public API (matches page-flip interface) ---------- */
+
+  loadFromHTML(pageElements) {
+    this.pages = Array.from(pageElements);
+    this._buildDOM();
+    this._setupInteraction();
+    this.updateSize();
+    this._showPage(0);
+  }
+
+  flipNext() {
+    if (this.isFlipping || this.currentPage >= this.pages.length - 1) return;
+    this._doFlip(this.currentPage + 1, 'forward');
+  }
+
+  flipPrev() {
+    if (this.isFlipping || this.currentPage <= 0) return;
+    this._doFlip(this.currentPage - 1, 'backward');
+  }
+
+  turnToPage(index) {
+    if (index < 0 || index >= this.pages.length) return;
+    // Cancel any in-progress flip
+    this.isFlipping = false;
+    this.wrappers.forEach((w) => {
+      w.classList.remove(
+        'flip-exit-forward', 'flip-enter-forward',
+        'flip-exit-backward', 'flip-enter-backward',
+      );
+    });
+    this._showPage(index);
+    this._emit('flip', { data: index });
+  }
+
+  on(event, cb) {
+    (this.events[event] ||= []).push(cb);
+  }
+
+  updateFromSize() {
+    this.updateSize();
+  }
+
+  updateSize() {
+    const parent = this.container.parentElement;
+    if (!parent) return;
+
+    const cw = parent.clientWidth;
+    const ch = parent.clientHeight;
+    const ar = this.options.width / this.options.height;
+
+    let w, h;
+    if (cw / ch > ar) {
+      h = ch;
+      w = h * ar;
+    } else {
+      w = cw;
+      h = w / ar;
+    }
+
+    const { minWidth = 0, maxWidth = Infinity, minHeight = 0, maxHeight = Infinity } = this.options;
+    w = Math.max(minWidth, Math.min(maxWidth, w));
+    h = Math.max(minHeight, Math.min(maxHeight, h));
+
+    this.container.style.width = `${Math.round(w)}px`;
+    this.container.style.height = `${Math.round(h)}px`;
+  }
+
+  destroy() {
+    this.container.innerHTML = '';
+    this.pages = [];
+    this.wrappers = [];
+    this.events = {};
+  }
+
+  /* ---------- Internal ---------- */
+
+  _buildDOM() {
+    this.container.innerHTML = '';
+
+    this.viewport = document.createElement('div');
+    this.viewport.className = 'flip-viewport';
+
+    this.wrappers = this.pages.map((page) => {
+      const w = document.createElement('div');
+      w.className = 'flip-page-wrapper';
+      w.appendChild(page);
+      // Every page starts hidden
+      w.style.visibility = 'hidden';
+      w.style.display = 'none';
+      this.viewport.appendChild(w);
+      return w;
+    });
+
+    this.container.appendChild(this.viewport);
+  }
+
+  /** Instantly show exactly one page, hide everything else */
+  _showPage(index) {
+    this.wrappers.forEach((w, i) => {
+      const active = i === index;
+      w.style.visibility = active ? 'visible' : 'hidden';
+      w.style.display = active ? '' : 'none';
+      w.classList.remove(
+        'flip-exit-forward', 'flip-enter-forward',
+        'flip-exit-backward', 'flip-enter-backward',
+      );
+    });
+    this.currentPage = index;
+  }
+
+  /** Two-phase flip: exit current, then enter target */
+  _doFlip(target, direction) {
+    this.isFlipping = true;
+
+    const curr = this.wrappers[this.currentPage];
+    const next = this.wrappers[target];
+    const half = this.flipDuration / 2;
+
+    const exitClass = direction === 'forward' ? 'flip-exit-forward' : 'flip-exit-backward';
+    const enterClass = direction === 'forward' ? 'flip-enter-forward' : 'flip-enter-backward';
+
+    // --- Phase 1: animate current page out ---
+    curr.style.animationDuration = `${half}ms`;
+    curr.classList.add(exitClass);
+
+    const onExitEnd = () => {
+      curr.removeEventListener('animationend', onExitEnd);
+      curr.style.visibility = 'hidden';
+      curr.style.display = 'none';
+      curr.classList.remove(exitClass);
+
+      // --- Phase 2: animate next page in ---
+      next.style.display = '';
+      next.style.visibility = 'visible';
+      // Force reflow so the browser registers the new display state
+      // before the animation class is added.
+      void next.offsetHeight;
+      next.style.animationDuration = `${half}ms`;
+      next.classList.add(enterClass);
+
+      const onEnterEnd = () => {
+        next.removeEventListener('animationend', onEnterEnd);
+        next.classList.remove(enterClass);
+        this.currentPage = target;
+        this.isFlipping = false;
+        this._emit('flip', { data: target });
+      };
+
+      next.addEventListener('animationend', onEnterEnd);
+    };
+
+    curr.addEventListener('animationend', onExitEnd);
+  }
+
+  _setupInteraction() {
+    // --- Touch / swipe ---
+    this.viewport.addEventListener('touchstart', (e) => {
+      this.touchStartX = e.touches[0].clientX;
+      this.touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    this.viewport.addEventListener('touchend', (e) => {
+      if (this.isFlipping) return;
+      const dx = e.changedTouches[0].clientX - this.touchStartX;
+      const dy = e.changedTouches[0].clientY - this.touchStartY;
+      if (Math.abs(dx) > this.swipeThreshold && Math.abs(dx) > Math.abs(dy)) {
+        if (dx < 0) this.flipNext();
+        else this.flipPrev();
+      }
+    }, { passive: true });
+
+    // --- Click to advance ---
+    if (this.options.clickEventForward) {
+      this.viewport.addEventListener('click', (e) => {
+        if (this.isFlipping) return;
+        // Don't navigate when clicking interactive elements
+        if (e.target.closest('button, a, input, select, textarea, [role="button"]')) return;
+        const rect = this.viewport.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        if (x > rect.width * 0.5) this.flipNext();
+        else this.flipPrev();
+      });
+    }
+  }
+
+  _emit(event, data) {
+    (this.events[event] || []).forEach((fn) => fn(data));
+  }
+}
+
+/* ================================================================
+   Public helpers
+   ================================================================ */
+
 export function initPageFlip() {
   const bookEl = document.getElementById('book');
   if (!bookEl) {
@@ -129,70 +347,40 @@ export function initPageFlip() {
 
   const { width, height, minWidth, maxWidth, minHeight, maxHeight } = CONFIG.book;
 
-  pageFlipInstance = new PageFlip(bookEl, {
+  pageFlipInstance = new CustomPageFlip(bookEl, {
     width,
     height,
-    size: 'stretch',
     minWidth,
     maxWidth,
     minHeight,
     maxHeight,
-    drawShadow: true,
     flippingTime: CONFIG.animations.pageFlipDuration,
-    usePortrait: true,
-    showCover: true,
-    maxShadowOpacity: 0.5,
-    mobileScrollSupport: false,
     clickEventForward: true,
-    useMouseEvents: true,
     swipeDistance: 30,
-    showPageCorners: true,
   });
 
-  // Load pages
   const pages = document.querySelectorAll('#book .page');
   pageFlipInstance.loadFromHTML(pages);
 
   return pageFlipInstance;
 }
 
-/**
- * Get page flip instance
- */
 export function getPageFlip() {
   return pageFlipInstance;
 }
 
-/**
- * Go to next page
- */
 export function nextPage() {
-  if (pageFlipInstance) {
-    pageFlipInstance.flipNext();
-  }
+  if (pageFlipInstance) pageFlipInstance.flipNext();
 }
 
-/**
- * Go to previous page
- */
 export function prevPage() {
-  if (pageFlipInstance) {
-    pageFlipInstance.flipPrev();
-  }
+  if (pageFlipInstance) pageFlipInstance.flipPrev();
 }
 
-/**
- * Handle window resize
- */
 export function handleResize() {
-  if (pageFlipInstance) {
-    pageFlipInstance.updateFromSize();
-  }
+  if (pageFlipInstance) pageFlipInstance.updateFromSize();
 }
 
-/**
- * Destroy page flip instance
- */
 export function destroyPageFlip() {
   if (pageFlipInstance) {
     pageFlipInstance.destroy();

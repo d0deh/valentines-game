@@ -7,7 +7,7 @@ import { CONFIG } from '../config.js';
 import { buildBookPages, initPageFlip, getPageFlip, getTotalPages, nextPage, prevPage, handleResize } from './book.js';
 import { audioManager } from './audio.js';
 import { createParticles } from './particles.js';
-import { celebrate, showSuccessScreen } from './celebration.js';
+import { celebrate, showSuccessScreen, stopCelebration } from './celebration.js';
 
 // Import styles
 import '../styles/main.css';
@@ -20,6 +20,37 @@ let noAttempts = 0;
 // Volume control state
 let currentVolume = 0.5;
 let isDraggingVolume = false;
+
+// End page gate — prevents accidental skip
+let lastFlipTime = 0;
+let isOnEndPage = false;
+
+/**
+ * Simple debounce helper
+ */
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+/**
+ * Preload images for adjacent pages (called on flip)
+ */
+function preloadAdjacentImages(currentPageIndex) {
+  const pages = CONFIG.pages;
+  // Preload next 2 pages (offset by 1 for cover page)
+  for (let offset = 1; offset <= 2; offset++) {
+    const idx = currentPageIndex - 1 + offset; // -1 because page 0 is cover
+    if (idx >= 0 && idx < pages.length && pages[idx].image) {
+      const img = new Image();
+      const base = import.meta.env.BASE_URL || '/';
+      img.src = base + pages[idx].image;
+    }
+  }
+}
 
 /**
  * Initialize the application
@@ -38,6 +69,12 @@ function init() {
   // Initialize audio
   audioManager.init();
 
+  // Restore saved volume from localStorage
+  const savedVolume = localStorage.getItem('valentines-book-volume');
+  if (savedVolume !== null) {
+    currentVolume = parseFloat(savedVolume);
+  }
+
   // Create background particles
   createParticles();
 
@@ -51,20 +88,28 @@ function init() {
 }
 
 /**
- * Update the page indicator text
+ * Update the page indicator text and announce for screen readers
  */
 function updatePageIndicator(pageIndex) {
   const indicator = document.getElementById('page-indicator');
-  if (!indicator) return;
-
+  const announcer = document.getElementById('page-announcer');
   const contentPages = CONFIG.pages.length;
 
+  let text;
   if (pageIndex <= 0) {
-    indicator.textContent = 'Cover';
+    text = 'Cover';
   } else if (pageIndex <= contentPages) {
-    indicator.textContent = `Page ${pageIndex} / ${contentPages}`;
+    text = `Page ${pageIndex} of ${contentPages}`;
   } else {
-    indicator.textContent = 'The End';
+    text = 'The End';
+  }
+
+  if (indicator) {
+    indicator.textContent = text;
+  }
+  // Announce page change to screen readers via aria-live region
+  if (announcer) {
+    announcer.textContent = text;
   }
 }
 
@@ -78,19 +123,15 @@ function setupEventListeners(pageFlip) {
   pageFlip.on('flip', (e) => {
     audioManager.playPageTurnSound();
     updatePageIndicator(e.data);
+    lastFlipTime = Date.now();
+    isOnEndPage = (e.data >= totalPages - 1);
+
+    // Preload adjacent images for smooth viewing
+    preloadAdjacentImages(e.data);
 
     // Try to start music on first flip
     if (e.data === 1 && !audioManager.hasStarted) {
       audioManager.tryPlayMusic();
-    }
-
-    // Check if we've reached the last page (end page)
-    // e.data is the page index we're flipping TO
-    if (e.data >= totalPages - 1) {
-      // Small delay to let the flip animation complete
-      setTimeout(() => {
-        showQuestionScreen();
-      }, 600);
     }
   });
 
@@ -106,7 +147,11 @@ function setupEventListeners(pageFlip) {
   if (navNext) {
     navNext.addEventListener('click', (e) => {
       e.stopPropagation();
-      nextPage();
+      if (isOnEndPage) {
+        showQuestionScreen();
+      } else {
+        nextPage();
+      }
     });
   }
 
@@ -119,10 +164,17 @@ function setupEventListeners(pageFlip) {
     musicBtn.addEventListener('click', handleMusicToggle);
   }
 
-  // Yes button (using event delegation)
+  // Yes button and end-page button (using event delegation)
   document.addEventListener('click', (e) => {
     if (e.target.id === 'yes-btn') {
       handleYesClick();
+    }
+    if (e.target.id === 'end-page-btn' || e.target.closest('#end-page-btn')) {
+      // Guard: ignore clicks that arrive during/right after a page flip
+      // (clickEventForward causes the flip-click to also hit this button)
+      if (Date.now() - lastFlipTime > 900) {
+        showQuestionScreen();
+      }
     }
   });
 
@@ -135,16 +187,17 @@ function setupEventListeners(pageFlip) {
     backBtn.addEventListener('click', hideQuestionScreen);
   }
 
-  // Restart button
+  // Read Again button (soft reset, no page refresh)
   const restartBtn = document.getElementById('restart-btn');
   if (restartBtn) {
-    restartBtn.addEventListener('click', () => {
-      location.reload();
-    });
+    restartBtn.addEventListener('click', resetToStart);
   }
 
-  // Window resize
-  window.addEventListener('resize', handleResize);
+  // Window resize (debounced to avoid layout thrashing)
+  window.addEventListener('resize', debounce(handleResize, 150));
+
+  // Focus trap for modal overlays
+  document.addEventListener('keydown', trapFocus);
 
   // Volume control
   setupVolumeControl();
@@ -159,15 +212,12 @@ function setupEventListeners(pageFlip) {
 function setupVolumeControl() {
   const volumeDial = document.getElementById('volume-dial');
   const volumeKnob = document.getElementById('volume-knob');
-  const volumeFill = document.getElementById('volume-fill');
-  const volumeLabel = document.getElementById('volume-label');
-  const music = document.getElementById('bg-music');
 
-  if (!volumeDial || !volumeKnob || !music) return;
+  if (!volumeDial || !volumeKnob) return;
 
-  // Set initial volume
+  // Set initial volume (from localStorage or default)
   updateVolumeUI(currentVolume);
-  music.volume = currentVolume;
+  audioManager.setVolume(currentVolume);
 
   // Mouse/touch events for the dial track (click to set)
   volumeDial.addEventListener('mousedown', handleVolumeStart);
@@ -196,6 +246,8 @@ function setupVolumeControl() {
     if (isDraggingVolume) {
       isDraggingVolume = false;
       volumeDial.classList.remove('dragging');
+      // Persist volume preference
+      localStorage.setItem('valentines-book-volume', String(currentVolume));
     }
   }
 
@@ -203,12 +255,13 @@ function setupVolumeControl() {
     const rect = volumeDial.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
 
-    // Calculate position as percentage
+    // Calculate position as percentage (linear slider)
     let percentage = (clientX - rect.left) / rect.width;
     percentage = Math.max(0, Math.min(1, percentage));
 
     currentVolume = percentage;
-    music.volume = currentVolume;
+    // Use logarithmic curve for natural-feeling volume
+    audioManager.setVolume(percentage);
     updateVolumeUI(percentage);
   }
 }
@@ -242,12 +295,62 @@ function handleKeydown(e) {
     case 'ArrowRight':
     case 'Space':
       e.preventDefault();
-      nextPage();
+      if (isOnEndPage) {
+        showQuestionScreen();
+      } else {
+        nextPage();
+      }
       break;
     case 'ArrowLeft':
       e.preventDefault();
       prevPage();
       break;
+    case 'Escape':
+      e.preventDefault();
+      // Close whichever overlay is open
+      if (document.getElementById('success-screen')?.classList.contains('visible')) {
+        resetToStart();
+      } else if (document.getElementById('question-screen')?.classList.contains('visible')) {
+        hideQuestionScreen();
+      }
+      break;
+  }
+}
+
+/**
+ * Trap Tab focus within a visible modal overlay
+ */
+function trapFocus(e) {
+  const questionScreen = document.getElementById('question-screen');
+  const successScreen = document.getElementById('success-screen');
+
+  // Determine which overlay is active
+  const activeOverlay = successScreen?.classList.contains('visible')
+    ? successScreen
+    : questionScreen?.classList.contains('visible')
+      ? questionScreen
+      : null;
+
+  if (!activeOverlay || e.key !== 'Tab') return;
+
+  const focusable = activeOverlay.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey) {
+    if (document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else {
+    if (document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 }
 
@@ -275,6 +378,11 @@ function showQuestionScreen() {
   if (questionScreen) {
     questionScreen.classList.add('visible');
     questionScreen.setAttribute('aria-hidden', 'false');
+    // Auto-focus the Yes button for keyboard users
+    const yesBtn = document.getElementById('yes-btn');
+    if (yesBtn) {
+      setTimeout(() => yesBtn.focus(), 100);
+    }
   }
   if (bookContainer) {
     bookContainer.style.opacity = '0';
@@ -368,6 +476,55 @@ function handleNoHover(e) {
   btn.style.left = `${newX}px`;
   btn.style.top = `${newY}px`;
   btn.style.transform = `scale(${scale})`;
+}
+
+/**
+ * Reset everything and go back to the cover (no page refresh)
+ */
+function resetToStart() {
+  // Hide success screen
+  const successScreen = document.getElementById('success-screen');
+  if (successScreen) {
+    successScreen.classList.remove('visible');
+    successScreen.style.opacity = '';
+  }
+
+  // Hide question screen
+  const questionScreen = document.getElementById('question-screen');
+  if (questionScreen) {
+    questionScreen.classList.remove('visible');
+    questionScreen.setAttribute('aria-hidden', 'true');
+  }
+
+  // Show book container
+  const bookContainer = document.querySelector('.book-container');
+  if (bookContainer) {
+    bookContainer.style.opacity = '1';
+    bookContainer.style.pointerEvents = 'auto';
+  }
+  const bookFooter = document.getElementById('book-footer');
+  if (bookFooter) {
+    bookFooter.style.opacity = '1';
+  }
+
+  // Stop confetti/celebration
+  stopCelebration();
+  const canvas = document.getElementById('confetti-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Flip back to cover
+  const pf = getPageFlip();
+  if (pf) {
+    pf.turnToPage(0);
+  }
+
+  // Reset state
+  noAttempts = 0;
+  isOnEndPage = false;
+  updatePageIndicator(0);
 }
 
 /**
